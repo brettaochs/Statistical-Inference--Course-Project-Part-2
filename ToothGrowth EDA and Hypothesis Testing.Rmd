@@ -1,0 +1,98 @@
+---
+title: "Analysis of “ToothGrowth” Datasest from R Datasets"
+author: "Brett A. Ochs"
+date: "February 28, 2016"
+output: html_document
+---
+```{r message=FALSE}
+library(ggplot2); library(gridExtra); library(dplyr); library(datasets); library(DT)
+```
+
+###Dataset description from datasets() package in R 
+The response is the length of odontoblasts (teeth) in each of 10 guinea pigs at each of three dose levels of Vitamin C (0.5, 1, and 2 mg) with each of two delivery methods (orange juice or ascorbic acid).
+
+First we will load the dataset into a dataframe, rename columns for better understanding, and evaluate summary statistics.
+
+```{r}
+## Load "ToothGrowth" dataset into dataframe
+df <- ToothGrowth; 
+## Change variable names within dataframe for better understanding and summarize
+names(df) <- c("Tooth.Length", "Delivery.Method", "Dosage"); summary(df)
+## Set up variables for dosage and delivery method.
+dosages <- c(0.5, 1, 2); deliverys <- c("OJ", "VC")
+```
+
+##Exploratory Data Analysis
+###Summary Table
+
+Sometimes we may want to see a simple table with means and standard deviations for each treatment to better understand if differences may be likely. This table can be sorted and filtered to make individual comparisons to the tooth length means of that treatment, suggested to filter first by Delivery.Mechanism then by Dosage to see rows close together for Dosage.
+
+```{r}
+df.summary <- tbl_df(df)%>%
+    group_by(Delivery.Method, Dosage) %>%
+    summarise(Count = n(),
+              Mean.Tooth.Length = round(mean(Tooth.Length), digits=2),
+              Stdev.Tooth.Length = round(sd(Tooth.Length), digits = 2))
+datatable(df.summary, rownames = FALSE, filter="top",
+          caption="Table 1. Interactive summary table of different dosage and delivery mechanism statistics for Tooth Length")
+```
+
+We see very little difference between delivery mechanisms at the highest dosage, but do see some differences of interest between delivery mechanism for both dosage or 0.5 and 1.0.
+
+###Visuals
+One of the best visual EDA for this type of dataset is to evaluate boxplots of the different dosages and delivery methods. To understand the visualization I like to facet by different variables for different look. I see trends within delivery mechanisms that the higher dosage administered, the longer the Tooth Length means. I do not see strong trends for differences in delivery methods either within or between dosages.
+
+```{r, fig.height=7, fig.width=10}
+## Simple boxplot to see if tooth length trends are similar across delivery methods within dosage
+box1 <- ggplot(data=df) + geom_boxplot(aes(x=Delivery.Method, y=Tooth.Length, fill=Delivery.Method)) +
+    scale_fill_manual(name="Delivery\nMethod", breaks=c("OJ", "VC"), labels=c("OJ", "VC2"), 
+                      values=c("orangered3", "green4")) +
+    labs(title="Fig.1- Boxplot of Tooth Length by\nDelivery Method Within Dosage", x="Delivery Method", y="Tooth Length") +
+    theme(axis.text.x=element_text(angle=30, vjust=0.5, size=8, face="bold"),
+          axis.text.y=element_text(size=10, face="bold"), axis.title=element_text(size=10, face="bold"),
+          plot.title=element_text(size=12, face="bold"), legend.text=element_text(size=6)) +
+    facet_grid(. ~ Dosage)
+
+## Simple boxplot to see if tooth length trends are similar across dosage within delivery methods
+box2 <-ggplot(data=df) + geom_boxplot(aes(x=as.factor(Dosage), y=Tooth.Length, fill=Delivery.Method))  +
+    scale_fill_manual(name="Delivery\nMethod",
+                      breaks=c("OJ", "VC"),
+                      labels=c("OJ", "VC2"),
+                      values=c("orangered3", "green4")) +labs(title="Fig.1- Boxplot of Tooth Length by\nDosage Within Delivery Method", x="Dosage", y="Tooth Length") +
+    theme(axis.text.x=element_text(angle=30, vjust=0.5, size=8, face="bold"),
+          axis.text.y=element_text(size=10, face="bold"), axis.title=element_text(size=10, face="bold"),
+          plot.title=element_text(size=12, face="bold"), legend.text=element_text(size=6)) +
+    facet_grid(. ~ Delivery.Method)
+grid.arrange(box1, box2, ncol=2)
+```
+
+##Hypothesis Testing
+To get started lets do a simple t-test to determine if there are differences in delivery mechanism when we evaluate all dosage levels. Above we saw that visually it did not look like a trend that delivery mechanisms were different when looking at all dosage levels.
+
+```{r}
+## Evalaute differences in delivery method for teeth length across dosage
+delivery.t <- t.test(Tooth.Length ~ Delivery.Method, paired=FALSE, alternative="two.sided", data=df)
+delivery.t
+```
+We get a p-value of **`r round(delivery.t$p.value, digits=4)`** so we fail to reject the Null Hypothesis that the means of delivery mechanism are equal across all dosage levels. We also see the 95% confidence interval is **`r round(delivery.t$conf.int[1], digits=4)`** to **`r round(delivery.t$conf.int[2], digits=4)`** which encompasses zero (but barely so) which also would lead us to fail to reject Null Hypothesis. 
+
+Since the p-value is close to 0.05 though we will dig in further to dosage levels and see if there are differences between delivery mechanism within individual dosage levels. Below is code and resulting t-test information for comparison of delivery mechanism within each dosage level of 0.5 mg., 1 mg., and 2 mg. Lets set up 3 Null Hypothesis to test:
+1. Means of delivery mechanisms are equal for dosage **`r dosages[1]` mg**.
+2. Means of delivery mechanisms are equal for dosage **`r dosages[2]` mg**.
+3. Means of delivery mechanisms are equal for dosage **`r dosages[3]` mg**.
+
+```{r}
+## Loop to evaluate effect of delivery method within same dosage
+result <- vector("list", 6)
+for(i in 1:length(dosages)){
+    df.temp <- df[df$Dosage == dosages[i], ]
+    t.test.temp <- t.test(Tooth.Length ~ Delivery.Method, data=df.temp)
+    print(paste0("Comparison of delivery mechanism t-test of ", dosages[i], "mg dosage"))
+    result[[i]] <- t.test.temp
+    print(t.test.temp)
+}
+```
+
+1. For dosage of **`r dosages[1]` mg.** we reject the Null Hypothesis of equal delivery mechanism means since p-value of **`r round(result[[1]]$p.value, digits=5)`** <= **0.05**. In this case we do see differences in Delivery Mechanism within that low dose, similar to trends within boxplots above.
+2. For dosage of **`r dosages[2]` mg.** we reject the Null Hypothesis of equal delivery mechanism means since p-value of **`r round(result[[2]]$p.value, digits=5)`** <= **0.05**. In this case we do see differences in Delivery Mechanism within that middle dose, similar to trends within boxplots above. 
+3. For dosage of **`r dosages[3]` mg.** we fail to reject the Null Hypothesis of equal delivery mechanism means since p-value of **`r round(result[[3]]$p.value, digits=5)`** >= **0.05**. In this case we do not see differences in Delivery Mechanism within that high dose, similar to trends within boxplots above.
